@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>一次性輸出</title>
+  <style>
+    body{
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      background:#ffffff; color:#000; margin:0; padding:40px;
+    }
+    .screen{ max-width:720px; margin:auto; display:none; }
+    .screen.active{ display:block; }
+    h1{ font-size:20px; margin:0 0 18px 0; font-weight:700; }
+    p{ font-size:16px; line-height:1.7; margin:0 0 12px 0; }
+    .meta{ margin-top:16px; font-size:14px; color:#222; }
+    textarea{
+      width:100%; height:340px; font-size:16px; padding:12px;
+      box-sizing:border-box; border:1px solid #000; outline:none;
+    }
+    button{
+      margin-top:18px; padding:10px 16px; font-size:16px;
+      border:1px solid #000; background:#fff; cursor:pointer;
+    }
+    button.full{ width:100%; }
+    .divider{ height:1px; background:#000; margin:18px 0; }
+  </style>
+</head>
+<body>
+
+  <!-- 畫面 1：開始 -->
+  <div id="screen-1" class="screen active">
+    <h1>一次性輸出</h1>
+
+    <p>此工具用於一次性的文字輸出，輸入形式不限。</p>
+
+    <div class="divider"></div>
+
+    <p>輸入期間，系統不會回應、不會分析內容，也不會保存任何文字。</p>
+    <p>當 30 秒沒有輸入時，系統將自動結束本次使用。</p>
+
+    <button class="full" onclick="goToScreen(2)">開始輸入</button>
+  </div>
+
+  <!-- 畫面 2：輸入 -->
+  <div id="screen-2" class="screen">
+    <textarea id="input" autofocus></textarea>
+    <div class="meta" id="status"></div>
+    <!-- 沒有送出按鈕：讓結束完全由 idle 判斷觸發 -->
+  </div>
+
+  <!-- 畫面 3：結束（無按鈕，自動關閉） -->
+  <div id="screen-3" class="screen">
+    <p>內容已收到。</p>
+    <p>輸出已完成，系統將結束此畫面。</p>
+  </div>
+
+  <script>
+    // ---------- 可調參數 ----------
+    const IDLE_LIMIT_MS = 45 * 1000;   // 45 秒沒輸入 → 結束
+    const END_SCREEN_MS = 3000;        // 結束畫面停留 3 秒 → 關閉
+    const TICK_MS = 250;               // 檢查頻率（越小越即時）
+
+    // ---------- 狀態 ----------
+    let lastInputTime = Date.now();
+    let idleTimer = null;
+    let endTimer = null;
+
+    const textarea = document.getElementById("input");
+    const statusEl = document.getElementById("status");
+
+    function isActive(id){
+      return document.getElementById(id).classList.contains("active");
+    }
+
+    function goToScreen(n){
+      // 切換畫面
+      document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+      document.getElementById(`screen-${n}`).classList.add("active");
+
+      // 清掉既有計時器
+      if (idleTimer) { clearInterval(idleTimer); idleTimer = null; }
+      if (endTimer) { clearTimeout(endTimer); endTimer = null; }
+
+      if (n === 2){
+        // 進入輸入畫面時，重設 idle 計時並聚焦
+        lastInputTime = Date.now();
+        if (statusEl) statusEl.textContent = ""; // 不顯示倒數，避免壓力與節奏依賴
+        setTimeout(() => textarea.focus(), 0);
+
+        // 開始 idle 監控（只看「行為」，不看內容）
+        idleTimer = setInterval(() => {
+          if (!isActive("screen-2")) return;
+          const now = Date.now();
+          const shouldEnd = (now - lastInputTime) >= IDLE_LIMIT_MS;
+
+          // 可選：你如果想在輸入頁有一點「系統在場」但不提示倒數，
+          // 可以留空（目前留空，避免壓力）
+          // statusEl.textContent = "";
+
+          if (shouldEnd) {
+            goToScreen(3);
+          }
+        }, TICK_MS);
+
+      } else if (n === 3){
+        // 進入結束畫面後，2.5 秒自動關閉
+        endTimer = setTimeout(() => {
+          closeGracefully();
+        }, END_SCREEN_MS);
+
+      } else if (n === 1){
+        // 回到開始畫面：清空輸入（維持一次性）
+        textarea.value = "";
+      }
+    }
+
+    // 輸入行為：只更新「最近一次輸入時間」
+    textarea.addEventListener("input", () => {
+      lastInputTime = Date.now();
+    });
+
+    // 更完整：鍵盤按下也算（即使沒改變內容，例如一直按鍵）
+    textarea.addEventListener("keydown", () => {
+      lastInputTime = Date.now();
+    });
+
+    function closeGracefully(){
+      // 嘗試關閉（某些瀏覽器/以 file:// 開啟可能不允許）
+      try { window.close(); } catch (e) {}
+
+      // 若關不掉：用「清空頁面」作為退場，避免停留
+      // 這樣使用者
+      document.body.innerHTML = "";
+      document.title = "";
+      // 轉到空白頁（部分瀏覽器更有效）
+      try { window.location.replace("about:blank"); } catch (e) {}
+    }
+  </script>
+
+</body>
+</html>
